@@ -1,0 +1,78 @@
+name: Build FNAF Into the Pit (nxnative)
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: xcode-27
+    timeout-minutes: 360
+    steps:
+      - name: Checkout (repo de build, sin archivos del juego)
+        uses: actions/checkout@v4
+
+      - name: Seleccionar Xcode 27.2 y liberar disco
+        run: |
+          for d in /Applications/Xcode_27.2.app /Applications/Xcode_27.2.0.app; do
+            if [ -d "$d" ]; then sudo xcode-select -s "$d"; echo "Seleccionado $d"; fi
+          done
+          xcodebuild -version
+          xcrun -sdk macosx metal --version
+          for d in /Applications/Xcode*.app; do
+            case "$(basename "$d")" in
+              *27.2*) echo "mantengo $d" ;;
+              *) echo "borro $d"; sudo rm -rf "$d" ;;
+            esac
+          done
+          rm -rf ~/Library/Android 2>/dev/null || true
+          rm -rf ~/Library/Developer/CoreSimulator 2>/dev/null || true
+          sudo rm -rf /Applications/GarageBand.app /Applications/iMovie.app /Applications/Keynote.app /Applications/Numbers.app /Applications/Pages.app 2>/dev/null || true
+          df -h /
+
+      - name: Herramientas y nxnative (upstream, al día)
+        run: |
+          xcodebuild -downloadComponent MetalToolchain
+          brew install xcodegen zstd glslang
+          brew install --cask dotnet-sdk || true
+          python3 -m pip install --user --break-system-packages lz4 "capstone>=5,<6" fonttools nsz zbic
+          python3 -m pip install --user --break-system-packages "backports.zstd; python_version < '3.14'" || true
+          cd ~ && git clone --depth 1 https://github.com/seedds/nxnative.git
+
+      - name: Parche - lanzador en español y ajustes por defecto
+        run: |
+          python3 "$GITHUB_WORKSPACE/tools/traducir_y_ajustes.py" ~/nxnative
+
+      - name: Descargar el juego desde la release privada
+        env:
+          GH_TOKEN: ${{ secrets.PRIVATE_REPO_TOKEN }}
+        run: |
+          mkdir -p ~/Games/IntoThePit ~/keys
+          cd ~/Games/IntoThePit
+          gh release download game --repo ShebasK0908/into-the-pit-build --dir dl
+          ls -la dl
+          cp dl/prod.keys ~/keys/prod.keys
+          test -s ~/keys/prod.keys
+          cat dl/xci-part-* > "[010015F01C8EC000].xci"
+          ls -la
+          test $(stat -f%z "[010015F01C8EC000].xci") -eq 5367343104
+          python3 -c "d=open('[010015F01C8EC000].xci','rb'); d.seek(0x100); assert d.read(4)==b'HEAD', 'magic HEAD no encontrado'; print('XCI HEAD ok')"
+
+      - name: Build del IPA (idioma del juego - español)
+        run: |
+          python3 ~/nxnative/scripts/build_ipa_from_nsp.py ~/Games/IntoThePit -k ~/keys/prod.keys -l es --no-keep-extracted
+          ls -la ~/Games/IntoThePit
+
+      - name: Subir el resultado a la release privada
+        env:
+          GH_TOKEN: ${{ secrets.PRIVATE_REPO_TOKEN }}
+        run: |
+          cd ~/Games/IntoThePit
+          IPA=$(find . -maxdepth 2 -name '*.ipa' | head -1)
+          test -n "$IPA"
+          ls -la "$IPA"
+          split -b 1900m "$IPA" ipa-part-
+          PARTS=$(ls ipa-part-*)
+          gh release create into-the-pit-ipa $PARTS --repo ShebasK0908/into-the-pit-build --title "FNAF Into the Pit IPA (privado)" --notes "Build propia del usuario desde su copia (perfil provisional, sin perfil upstream). No compartir." || gh release upload into-the-pit-ipa $PARTS --clobber --repo ShebasK0908/into-the-pit-build
