@@ -4,7 +4,9 @@
 # de la build 1) y los build IDs reales de la v262144 leidos de las tablas dm/ de la .ipa entregada (main.fixups/obs),
 # verificados contra el censo propio del RomFS de esa misma .ipa (2.203 archivos, todo bajo Data/, como un Unity de Switch).
 # SIN op_mode a proposito: el modo lo elige el usuario en el lanzador (DM_OPMODE = DM_GAME_OPMODE, como en la build 1).
-# SIN shader_groups: la build 1 no los llevaba y su split compilo los 6.621 shaders; no se toca lo que funcionaba.
+# shader_groups /Data/=data y romfs_marker = el fichero mas grande del RomFS: los que write_profile
+# escribio en la build 1 (shader_split.py EXIGE la clave shader_groups: el primer intento de esta
+# build 2, run 45247371436, murio en el paso [6/9] con KeyError 'has no key shader_groups').
 # SIN fps_target/fps_max: ningun patron de limitador confirmado en este main de Unity (main.fixups.tsv de la build 1
 # no trae ninguna fila de patron); el juego corre a su propio intervalo de presentacion (las intros iban a 60 fps).
 
@@ -16,6 +18,8 @@ program_id	010015F01C8EC000
 name	Five Nights at Freddy's: Into the Pit
 ipa	FiveNightsAtFreddysIntoThePit.ipa
 app_category	public.app-category.games
+# (el del guesser en la build 1; sin cambios: los controles quedan como estaban)
+pad_layout	full
 
 # ---- Versions ----
 build	v262144	1.0	main=b01031152e84f8bd0c8edefcc475a3f9	subsdk0=29b829cc3bb8021bbd447c98f71a66f2	sdk=71b1a025aa30641a53aa4fc53ca742a6
@@ -24,7 +28,9 @@ shader_versions	v262144
 
 # ---- Files ----
 modules	main subsdk0 sdk
-romfs_marker	Data/globalgamemanagers
+# El de la build 1 (write_profile: el fichero mas grande del RomFS; censo propio: 407.934.848 B).
+# El host solo lo usa para distinguir el RomFS empaquetado de una carpeta suelta.
+romfs_marker	Data/sharedassets3.assets.resS
 zip_store	.assets:.bundle:.dat:.json:.resource:.ress:.metallib
 
 # ---- Memory ----
@@ -52,3 +58,9 @@ stdalloc_cap	0x40000000
 # ---- Address region check ----
 # the game calls nvnDeviceSetDepthMode with near = 0 in the check boot (build 1): the pipeline bases made before it runs are made for that mode
 depth_mode	zero
+
+# ---- Shader split ----
+# Los de la build 1: sus paquetes en la .ipa entregada se llaman vs_data.bin/ps_data.bin, asi que
+# las claves de cache de shaders quedan identicas a las de la build 1.
+shader_groups	/Data/=data
+shader_note	Five Nights at Freddy's: Into the Pit shaders
