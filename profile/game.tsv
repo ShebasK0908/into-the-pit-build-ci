@@ -1,0 +1,54 @@
+# Five Nights at Freddy's: Into the Pit, SDK 17, Unity (IL2CPP), NVN. Perfil FUSIONADO a mano para la build 2 (2026-11-23):
+# base = la que write_profile habria escrito desde el survey de la build 1 (run 45068780485), con las claves decididas/verificadas:
+# stdalloc_cap 0x40000000 (ver el bloque Memory: es EL cambio de esta build), depth_mode zero (detectado en el heap check
+# de la build 1) y los build IDs reales de la v262144 leidos de las tablas dm/ de la .ipa entregada (main.fixups/obs),
+# verificados contra el censo propio del RomFS de esa misma .ipa (2.203 archivos, todo bajo Data/, como un Unity de Switch).
+# SIN op_mode a proposito: el modo lo elige el usuario en el lanzador (DM_OPMODE = DM_GAME_OPMODE, como en la build 1).
+# SIN shader_groups: la build 1 no los llevaba y su split compilo los 6.621 shaders; no se toca lo que funcionaba.
+# SIN fps_target/fps_max: ningun patron de limitador confirmado en este main de Unity (main.fixups.tsv de la build 1
+# no trae ninguna fila de patron); el juego corre a su propio intervalo de presentacion (las intros iban a 60 fps).
+
+# ---- Identity ----
+title_id	010015F01C8EC000
+program_id	010015F01C8EC000
+
+# ---- App ----
+name	Five Nights at Freddy's: Into the Pit
+ipa	FiveNightsAtFreddysIntoThePit.ipa
+app_category	public.app-category.games
+
+# ---- Versions ----
+build	v262144	1.0	main=b01031152e84f8bd0c8edefcc475a3f9	subsdk0=29b829cc3bb8021bbd447c98f71a66f2	sdk=71b1a025aa30641a53aa4fc53ca742a6
+package	v262144
+shader_versions	v262144
+
+# ---- Files ----
+modules	main subsdk0 sdk
+romfs_marker	Data/globalgamemanagers
+zip_store	.assets:.bundle:.dat:.json:.resource:.ress:.metallib
+
+# ---- Memory ----
+# El NPDM declara 16 MB de system resource: IsVirtualAddressMemoryEnabled es true y nninitStartup entrega
+# pool - used a StandardAllocator como UNA region de direcciones alineada a 1 GB en la region alias, sin
+# llamar nunca a SetMemoryHeapSize (el heap check de la build 1: "no heap set"). Es el mismo caso medido en
+# Ace Attorney Investigations Collection (Unity 2022.3, SDK 17.5.3, mismo NPDM de 16 MB y los mismos cortes
+# de AddressRegionManager en su sdk, sdk+0x139468): con el pool de hardware (0xCD500000, el de la build 1)
+# StandardAllocator se reserva ~3,14 GB tras el area de nodos y los pools propios de Unity se colocan al lado,
+# y las regiones vivas llegaron al final de la region alias de 4,375 GB en ~140 s: la region alias se llena
+# en minutos y el juego muere sin excepcion (en el iPhone: intros a 60 fps, 100 % de CPU, cierre tras el logo
+# de Mega Cat Studios al cargar el menu, sin .ips de crash; solo el informe cpu_resource).
+# El remedio es encoger ESA region, no el pool que el juego lee como memoria de la maquina: la clave
+# stdalloc_cap (la misma que heap_signals de profile_guess.py escribe hoy cuando el check ve la alias casi
+# llena con el pool de 3,2 GB) la deja en 1 GB, el tamaño medido en Ace Attorney (0,94 GB, cinco veces su
+# uso real). mem_reserve / mem_alias / mem_stack / app_pool / sys_resource quedan como los de la build 1.
+mem_reserve	0x140000000
+mem_alias	0x118000000
+mem_stack	0x10000000
+app_pool	0xCD500000
+# the NPDM declares 16 MB of system resource
+sys_resource	0x1000000
+stdalloc_cap	0x40000000
+
+# ---- Address region check ----
+# the game calls nvnDeviceSetDepthMode with near = 0 in the check boot (build 1): the pipeline bases made before it runs are made for that mode
+depth_mode	zero
