@@ -1,4 +1,4 @@
-name: Build FNAF Into the Pit (nxnative)
+name: Build FNAF Into the Pit (nxnative) — build 2 (perfil fusionado + bring-up)
 
 on:
   workflow_dispatch:
@@ -60,6 +60,30 @@ jobs:
           test $(stat -f%z "[010015F01C8EC000].xci") -eq 5367343104
           python3 -c "d=open('[010015F01C8EC000].xci','rb'); d.seek(0x100); assert d.read(4)==b'HEAD', 'magic HEAD no encontrado'; print('XCI HEAD ok')"
 
+      - name: Sembrar el perfil FUSIONADO (build 2)
+        run: |
+          # Perfil revisado a mano (profile/game.tsv en este repo): la build lo reutiliza y SALTA el survey.
+          # Cambio frente a la build 1: stdalloc_cap 0x40000000 (la region de StandardAllocator queda en 1 GB;
+          # con el pool de hardware de la build 1 la region alias de 4,375 GB se llenaba en minutos y el juego
+          # se cerraba tras el logo, al cargar el menu, sin crash) y depth_mode zero (detectado en su heap check),
+          # con los build IDs reales de la v262144. SIN op_mode: el modo lo elige el usuario en el lanzador.
+          PDIR=~/Games/IntoThePit/010015F01C8EC000_build/profile/010015F01C8EC000
+          mkdir -p "$PDIR"
+          cp "$GITHUB_WORKSPACE/profile/"* "$PDIR/"
+          ls -la "$PDIR"
+          grep -E '^(stdalloc_cap|depth_mode|romfs_marker|app_pool)' "$PDIR/game.tsv"
+
+      - name: Bring-up — boot de comprobación largo en el host de Mac (240 s en nnMain)
+        run: |
+          # La build 1 solo dejo correr el juego 15 s en nnMain en su check de regiones. Con 240 s el check
+          # boot de ESTA build atraviesa las intros y llega a la carga del menu en el host: si el llenado de
+          # la region alias o un error fatal se reproduce en Mac, queda escrito en logs/region_check.log
+          # (se sube como artefacto al final). El check no tumba la build si el host se para: informa y sigue.
+          S=~/nxnative/scripts/build_ipa_from_nsp.py
+          sed -i '' 's/^REGION_CHECK_NNMAIN_SECS = 15 /REGION_CHECK_NNMAIN_SECS = 240 /' "$S"
+          grep -n '^REGION_CHECK_NNMAIN_SECS' "$S"
+          grep -q '^REGION_CHECK_NNMAIN_SECS = 240' "$S"
+
       - name: Build del IPA (idioma del juego - español)
         run: |
           python3 ~/nxnative/scripts/build_ipa_from_nsp.py ~/Games/IntoThePit -k ~/keys/prod.keys -l es --no-keep-extracted
@@ -75,4 +99,14 @@ jobs:
           ls -la "$IPA"
           split -b 1900m "$IPA" ipa-part-
           PARTS=$(ls ipa-part-*)
-          gh release create into-the-pit-ipa $PARTS --repo ShebasK0908/into-the-pit-build --title "FNAF Into the Pit IPA (privado)" --notes "Build propia del usuario desde su copia (perfil provisional, sin perfil upstream). No compartir." || gh release upload into-the-pit-ipa $PARTS --clobber --repo ShebasK0908/into-the-pit-build
+          gh release create into-the-pit-ipa $PARTS --repo ShebasK0908/into-the-pit-build --title "FNAF Into the Pit IPA (privado)" --notes "Build 2 del usuario desde su copia (perfil fusionado: stdalloc_cap 1 GB + depth_mode zero + bring-up de 240 s). No compartir." || gh release upload into-the-pit-ipa $PARTS --clobber --repo ShebasK0908/into-the-pit-build
+
+      - name: Subir logs y perfil final (diagnóstico del bring-up)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build2-logs-y-perfil
+          path: |
+            ~/Games/IntoThePit/010015F01C8EC000_build/logs
+            ~/Games/IntoThePit/010015F01C8EC000_build/profile
+          if-no-files-found: ignore
